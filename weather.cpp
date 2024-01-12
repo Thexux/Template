@@ -99,6 +99,7 @@ Weather::Weather(QWidget *parent)
 
     ui->sunLb->installEventFilter(this); // 启用事件过滤器
     ui->curveLb->installEventFilter(this);
+    ui->citylineEdit->installEventFilter(this);
 }
 
 void Weather::mouseMoveEvent(QMouseEvent *ev)
@@ -411,6 +412,16 @@ bool Weather::eventFilter(QObject *watched, QEvent *event)
     if (watched ==  ui->curveLb && event->type() == QEvent::Paint)
     {
         paintCurve();
+    }
+    if (watched ==  ui->citylineEdit && event->type() == QEvent::KeyPress)
+    {
+        QKeyEvent *k = (QKeyEvent*)event;
+        if (k->text() == '\r')
+        {
+            cityTmp = city;
+            city = ui->citylineEdit->text();
+            getweatherinfo(manager);
+        }
     }
 
     return QWidget::eventFilter(watched,event);
