@@ -7,9 +7,39 @@
 #include <QNetworkReply>
 #include <QUrl>
 #include<QMessageBox>
+#include<QPainter>
+#include<QPen>
+#include<QTimer>
 #include"WeatherTool.h"
 
+#define STEP 3
+#define RADIOUS 3
+#define TEMPSATRT 40
+
+
 const int MAX = 6;
+
+// 日出日落底线
+const QPoint Weather::sun[2] =
+{
+    QPoint(20, 75),
+    QPoint(130, 75)
+};
+
+// 日出日落时间
+const QRect Weather::sunRizeSet[2] =
+{
+    QRect(0, 80, 50, 20),
+    QRect(100, 80, 50, 20)
+};
+
+// 日出日落圆弧
+const QRect Weather::rect[2] =
+{
+    QRect(25, 25, 100, 100), // 虚线圆弧
+    QRect(50, 80, 50, 20) // “日出日落”文本
+};
+
 
 Weather::Weather(QWidget *parent)
     : QWidget(parent)
@@ -26,8 +56,8 @@ Weather::Weather(QWidget *parent)
 
     initdatalist(ui);
     url = "http://t.weather.itboy.net/api/weather/city/";
-    cityTmp = city;
     city = u8"绥化";
+    cityTmp = city;
     manager = new QNetworkAccessManager(this);
     getweatherinfo(manager);
 
@@ -36,21 +66,39 @@ Weather::Weather(QWidget *parent)
         QVariant stat = re->attribute(QNetworkRequest::HttpStatusCodeAttribute);
         if(re->error() != QNetworkReply::NoError || stat != 200)
         {
-            QMessageBox::warning(this, u8"错误", u8"天气：请求数据错误，检查网络连接！", QMessageBox::Ok);
+            QMessageBox::warning(this, u8"错误", u8"请求数据错误，检查网络连接！", QMessageBox::Ok);
             return;
         }
         QByteArray ba = re->readAll();
         parejosn(ba);
     });
 
+    connect(ui->searchbtn, &QToolButton::clicked, [=](){
+        cityTmp = city;
+        city = ui->citylineEdit->text();
+        getweatherinfo(manager);
+    });
 
-    cout << tool[u8"白银"] << endl;
+    connect(ui->refreshbtn, &QToolButton::clicked, [=](){
+        getweatherinfo(manager);
+    });
 
-    QString dateStr = "20231011";
-    cout << dateStr.mid(4, 2) << endl;
-    QString date = QDate::fromString(dateStr, "yyyyMMdd").toString("yyyy-MM-dd");
-    cout << date << endl;
+//    cout << tool[u8"白银"] << endl;
 
+//    QString dateStr = "20231011";
+//    cout << dateStr.mid(4, 2) << endl;
+//    QString date = QDate::fromString(dateStr, "yyyyMMdd").toString("yyyy-MM-dd");
+//    cout << date << endl;
+
+    QTimer *timer = new QTimer(this);
+    timer->start(1000);
+    connect(timer, &QTimer::timeout, [=]()
+    {
+         ui->sunLb->update();
+    });
+
+    ui->sunLb->installEventFilter(this); // 启用事件过滤器
+    ui->curveLb->installEventFilter(this);
 }
 
 void Weather::mouseMoveEvent(QMouseEvent *ev)
@@ -136,12 +184,14 @@ void Weather::initdatalist(const Ui::Weather* ui)
     ui->citylineEdit->setStyleSheet(
                 "QLineEdit {"
                 "border: 1px solid gray;"
-                "border-radius: 4px; background:argb(47, 47, 47, 130);"
+                "border-radius: 4px;"
+                "background:argb(47, 47, 47, 130);"
                 "color:rgb(255, 255, 255);"
                 "}"
                 "QLineEdit:hover {"
                 "border-color:rgb(101, 255, 106);"
                 "}");
+    ui->citylineEdit->setPlaceholderText(u8"城市");
 }
 
 void Weather::getweatherinfo(QNetworkAccessManager* mg)
@@ -149,7 +199,8 @@ void Weather::getweatherinfo(QNetworkAccessManager* mg)
     QString code = tool[city];
     if(code=="0")
     {
-        QMessageBox::warning(this, u8"错误", u8"天气：指定城市不存在！", QMessageBox::Ok);
+        city = cityTmp;
+        QMessageBox::warning(this, u8"错误", u8"指定城市不存在！", QMessageBox::Ok);
         return;
     }
 
@@ -201,8 +252,9 @@ void Weather::setlabercontent()
     ui->gmtext->setText(today.ganmao);
     ui->noticeLb->setText(today.notice);
     ui->qualLb->setText(today.quality);
-    ui->qualLb->setStyleSheet(res[judgeaqi(today.quality.toInt())] + "background-color: argb(255, 255, 255, 0);");
+    ui->qualLb->setStyleSheet(res[today.quality] + "background-color: argb(255, 255, 255, 0);");
     ui->wdLb->setText(today.wendu);
+    //cout << today.quality << ' ' << judgeaqi(today.quality.toInt()) << endl;
 
     bool flag = 1;
     if (QDateTime::currentDateTime().toString().mid(9, 5) >= today.sunset) flag = 0;
@@ -226,8 +278,143 @@ void Weather::setlabercontent()
     forecast_week_list[0]->setText(u8"昨天");
     forecast_week_list[1]->setText(u8"今天");
     forecast_week_list[2]->setText(u8"明天");
+
+    ui->sunLb->update();
+    ui->curveLb->update();
 }
 
+int Weather::getsumtime(QString time)
+{
+    return (time.mid(0, 2).toInt() - today.sunrise.mid(0, 2).toInt()) * 60 +
+                (time.mid(3, 2).toInt() - today.sunrise.mid(3, 2).toInt());
+}
+
+void Weather::paintsun()
+{
+    //cout << 1 << endl;
+    QPainter painter(ui->sunLb);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    painter.save();
+    QPen pen = painter.pen();
+    pen.setColor(Qt::yellow);
+    pen.setWidthF(0.5);
+    painter.setPen(pen);
+    painter.drawLine(sun[0], sun[1]);
+    painter.restore();
+
+    painter.save();
+    painter.setFont(QFont("Microsoft Yahei", 8, QFont::Normal));
+    painter.setPen(Qt::white);
+    painter.drawText(sunRizeSet[0], Qt::AlignHCenter, today.sunrise);
+    painter.drawText(sunRizeSet[1], Qt::AlignHCenter, today.sunset);
+    painter.drawText(rect[1], Qt::AlignHCenter, u8"日出日落");
+    painter.restore();
+
+    painter.save();
+    //painter.drawRect(rect[0]);
+    pen.setWidthF(0.5);
+    pen.setStyle(Qt::DotLine); // 虚线
+    pen.setColor(Qt::green);
+    painter.setPen(pen);
+    painter.drawArc(rect[0], 0 * 16, 180 * 16);
+    painter.restore();
+
+    double st = 0, siz = 180;
+    int sum = getsumtime(today.sunset);
+    //cout << "=====" << sum << endl;
+    int now_sum = getsumtime(QTime::currentTime().toString());
+    //int now_sum = getsumtime("11:40");
+    //cout << now_sum << endl;
+    if (now_sum < sum)
+    {
+        siz = qMax(now_sum * 180.0 / sum, 0.0);
+        st = 180 - siz;
+    }
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 85, 0, 100));
+    painter.drawPie(rect[0], st * 16, siz * 16);
+
+}
+
+void Weather::paintCurve()
+{
+    //cout << 2 << endl;
+
+    int h[MAX] = {};
+    int l[MAX] = {};
+    int avg = 0;
+    for (int i = 0; i < MAX; i++)
+    {
+        QString st = fore.high[i].split(" ").at(1);
+        h[i] = st.left(st.size() - 1).toInt();
+        avg += h[i];
+        st = fore.low[i].split(" ").at(1);
+        l[i] = st.left(st.size() - 1).toInt();
+    }
+    avg /= MAX;
+
+    int px[MAX] = {35, 103, 172, 241, 310, 379};
+    int phy[MAX] = {};
+    int ply[MAX] = {};
+
+    for (int i = 0; i < MAX; i++)
+    {
+        phy[i] = TEMPSATRT - (h[i] - avg) * STEP;
+        ply[i] = TEMPSATRT + (avg - l[i]) * STEP;
+    }
+
+    QPainter painter(ui->curveLb);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    painter.save();
+    QPen pen = painter.pen();
+    pen.setColor(QColor(255, 170, 0));
+    pen.setStyle(Qt::DotLine);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 170, 0));
+    painter.drawEllipse(QPoint(px[0], phy[0]), RADIOUS, RADIOUS);
+    for (int i = 1; i < MAX; i++)
+    {
+        painter.drawEllipse(QPoint(px[i], phy[i]), RADIOUS, RADIOUS);
+        painter.setPen(pen);
+        painter.drawLine(px[i - 1], phy[i - 1], px[i], phy[i]);
+        painter.setPen(Qt::NoPen);
+        pen.setStyle(Qt::SolidLine);
+    }
+    painter.restore();
+
+    painter.save();
+    pen = painter.pen();
+    pen.setColor(QColor(0, 255, 255));
+    pen.setStyle(Qt::DotLine);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0, 255, 255));
+    painter.drawEllipse(QPoint(px[0], ply[0]), RADIOUS, RADIOUS);
+    for (int i = 1; i < MAX; i++)
+    {
+        painter.drawEllipse(QPoint(px[i], ply[i]), RADIOUS, RADIOUS);
+        painter.setPen(pen);
+        painter.drawLine(px[i - 1], ply[i - 1], px[i], ply[i]);
+        painter.setPen(Qt::NoPen);
+        pen.setStyle(Qt::SolidLine);
+    }
+    painter.restore();
+}
+
+bool Weather::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == ui->sunLb && event->type() == QEvent::Paint)
+    {
+        paintsun();
+    }
+    if (watched ==  ui->curveLb && event->type() == QEvent::Paint)
+    {
+        paintCurve();
+    }
+
+    return QWidget::eventFilter(watched,event);
+}
 
 Weather::~Weather()
 {

@@ -65,6 +65,10 @@ protected:
     void parejosn(QByteArray ba);
     void setlabercontent();
     QString judgeaqi(int x);
+    void paintsun();
+    int getsumtime(QString time);
+    bool  eventFilter(QObject *watched, QEvent *event);
+    void paintCurve();
 
 private:
     Ui::Weather *ui;
@@ -88,6 +92,10 @@ private:
 
     WeatherTool tool;
     Resource res;
+
+    static const QPoint sun[2];
+    static const QRect sunRizeSet[2];
+    static const QRect rect[2];
 };
 
 #endif // WEATHER_H
