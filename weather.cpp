@@ -416,7 +416,7 @@ bool Weather::eventFilter(QObject *watched, QEvent *event)
     if (watched ==  ui->citylineEdit && event->type() == QEvent::KeyPress)
     {
         QKeyEvent *k = (QKeyEvent*)event;
-        if (k->text() == '\r')
+        if (k->key() == Qt::Key_Return || k->key() == Qt::Key_Enter)
         {
             cityTmp = city;
             city = ui->citylineEdit->text();
