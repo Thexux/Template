@@ -1,0 +1,12 @@
+add_rules("mode.debug", "mode.release")
+set_languages("cxx17")
+
+target("BoxGame")
+    add_rules("qt.console")
+    add_headerfiles("**.h")
+    add_files("src/*.cpp")
+    add_files("**.qrc")
+    add_files("src/*.ui")
+    -- add files with Q_OBJECT meta (only for qt.moc)
+    add_files("src/**.h")
+    add_frameworks("QtWidgets", "QtGui")
